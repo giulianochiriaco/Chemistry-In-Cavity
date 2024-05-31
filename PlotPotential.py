@@ -7,7 +7,7 @@ Created on Fri Apr 26 16:35:17 2024
 """
 
 import numpy as np
-import functions1 as fu
+import functions as fu
 from scipy.special import factorial, gamma, genlaguerre
 import matplotlib.pyplot as plt
 import numpy as np
