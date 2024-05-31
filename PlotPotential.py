@@ -7,7 +7,7 @@ Created on Fri Apr 26 16:35:17 2024
 """
 
 import numpy as np
-import functions as fu
+import functions1 as fu
 from scipy.special import factorial, gamma, genlaguerre
 import matplotlib.pyplot as plt
 import numpy as np
@@ -15,9 +15,6 @@ from matplotlib import rc, rcParams
 from matplotlib.colors import LogNorm
 
 
-hbar=6.654/(2*np.pi)*10**-34
-e=1.6*10**-19
-mass=7.1*10**-26
 
 
 # Example usage of the defined functions
@@ -26,14 +23,14 @@ mass=7.1*10**-26
 # Parameters for the Morse potential
 De1 = 0.474  # Depth of the potential well
 Re1 = 4.23  # Equilibrium bond length
-we1 = 0.05 # Width of the potential well
-#we1 = 1.31 # Width of the potential well
+#we1 = 0.05 # Width of the potential well
+we1 = 1.31 # Width of the potential well
 
 
 De2 = 0.846  # Depth of the potential well
 Re2 = 4.201 # Equilibrium bond length
-we2 = 0.05
-#we2 = 1.763# Width of the potential well
+#we2 = 0.05
+we2 = 1.763# Width of the potential well
 # Position vector R
 R = np.linspace(2.9, 11, 500)
 E_sp=1.212
