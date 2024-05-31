@@ -15,6 +15,16 @@ from matplotlib import rc, rcParams
 import time
 from tqdm import tqdm
 
+hbar=6.654/(2*np.pi)*10**-34#Js
+e=1.60218*10**-19#C  # 1 eV in Joules
+mass=7.1*10**-26
+c=3.0*10**8 #m/s
+epsilon_0=8.85418* 10**(-12)#F/m #{C}^2 {s}^2/ (kg m^3)
+
+
+
+
+
 def Vmorse(R, De, Re, we):
     """
     Define the Morse potential with depth De, equilibrium position Re, 
@@ -27,7 +37,9 @@ def omega_nu(lambd):
     Gives the vector of the energies of the bound vibrational states.
     Increasing order
     """
-    nuv = np.arange(int(lambd + 0.5)) #different from the notes of Giuliano
+    N= int(np.floor(lambd +0.5))
+    nuv = np.arange(N) #different from the notes of Giuliano
+  
     return -(lambd - nuv - 0.5)**2 / lambd**2
 
 def psiR(R, lambd, nu, Re, we, norm=1):
@@ -71,27 +83,6 @@ def psiz(z, lambd, nu):
     psi=term1*term2*term3
     return psi
     
-   
-
-# def Afc(lambd1, Re1, we1, lambd2, Re2, we2):
-#     """
-#     Gives a matrix (table) with the Franck-Condon factors between the vibrational levels
-#     of two different Morse potentials. The Morse potentials are characterized by different
-#     lambda (i.e., De), Re and we. Returns a matrix array with the Franck-Condon factors 
-#     between all the vibrational levels.
-#     """
-#     nuM1 = int(np.floor(lambd1 - 0.5))
-#     nuM2 = int(np.floor(lambd2 - 0.5))
-#     Amunu = np.zeros((nuM1 + 1, nuM2 + 1))
-#     Rv = np.linspace(0, 50 * max(we1, we2) + max(Re1, Re2), 10000) #creates a grid for numerical integration
-#     for nu1 in range(nuM1 + 1):
-#         psi1 = psiR(Rv, lambd1, nu1, Re1, we1) #creates the wavefunction \psi_nu1
-#         N1 = np.sum(psi1 * np.conjugate(psi1)) #calculate the norm of \psi_nu1
-#         for nu2 in range(nuM2 + 1):
-#             psi2 = psiR(Rv, lambd2, nu2, Re2, we2) #creates the wavefunction \psi_nu2
-#             N2 = np.sum(psi2 * np.conjugate(psi2)) #calculate the norm of \psi_nu2
-#             Amunu[nu1, nu2] = np.sum(psi1 * psi2) / np.sqrt(N1 * N2) #calculate the scalar product of \psi_nu1 and \psi_nu2
-#     return Amunu
 
 
 def Afc(lambd1, Re1, we1, lambd2, Re2, we2):
@@ -156,16 +147,8 @@ def Ec_Gaussian(tv,wL,tau,wc,r):
         out = out + (-r)**n*np.exp(-1j*wL*(tv-n*np.pi/wc))*np.exp(-(tv-n*np.pi/wc)**2/tau**2)
     return out
 
-def gammaMatrix_Old(dim1,dim2,Reg):
-    Ga = np.zeros((dim1, dim2))
-    # Creates the A_munu matrix
-    #
-    # given that Reg is in Angstrom and \hbar\omega is in eV G0 in eV reads
-    Ga0=1
-    #Ga = np.ones((dim1, dim2))
-    Ga=Ga0*np.eye(dim1, dim2)+0.5*np.ones((dim1, dim2))
-    
-    return Ga
+
+
 
 
 def gammaMatrix(dim1,dim2,Reg,De1, Re1, we1, De2, Re2, we2,E_sp):
@@ -176,6 +159,19 @@ def gammaMatrix(dim1,dim2,Reg,De1, Re1, we1, De2, Re2, we2,E_sp):
     Amunu=Afc(lambd1, Re1, we1, lambd2, Re2, we2)
     energy_eigenvalues = omega_nu(lambd1) * De1
     energy_eigenvalues1 = omega_nu(lambd2) * De2+E_sp
+    # given that Reg is in Angstrom and \hbar\omega is in eV G0 in eV reads
+    # Given values
+    En = e # 1 eV in Joules
+    Reg_scale = 1 * 10**-10  # 1 angstrom in meters
+    
+    term_1 = En**3/ (hbar**4*c**3 )
+    term_2= Reg_scale**2 * e**2/(3*np.pi* epsilon_0)
+    
+    # Calculate denominator
+   
+    
+  
+    G0=Reg**2*term_1*term_2
    
     # given that Reg is in Angstrom and \hbar\omega is in eV G0 in eV reads
     #OLD for loop computation of Gamma
@@ -184,7 +180,7 @@ def gammaMatrix(dim1,dim2,Reg,De1, Re1, we1, De2, Re2, we2,E_sp):
     #         Ga[i,j]=Amunu[i,j]*( energy_eigenvalues1[j]-  energy_eigenvalues[i])**3
     # Vectorized computation of Ga matrix
     energy_diff = energy_eigenvalues1[ np.newaxis,:] - energy_eigenvalues[:,np.newaxis]
-    Ga += Amunu**2 * (energy_diff ** 3)
+    Ga = Amunu**2 * (energy_diff ** 3)
     
     return Ga
     
@@ -197,45 +193,21 @@ def E0(t):
     return E0
 
 
-def omegaMuNu(t,dim1,dim2,Reg):
+
+
+def omegaMuNu(t, dim1, dim2, Reg,Amunu,Omega_0,omega_L,energy_eigenvalues,energy_eigenvalues1):
     Om = np.zeros((dim1, dim2), dtype=complex)
+    energy_diff = energy_eigenvalues1[ np.newaxis,:] - energy_eigenvalues[:,np.newaxis]
+   
+    exp_f = np.exp(1j * (energy_diff - omega_L) * t)*np.exp(-t**2/200)
+   
+    Om=Omega_0*Amunu*exp_f
     # Om=Deg*E0(t)
-    # Ensuring Hermitian by mirroring real components
+   
     return Om
 
 
-# def system_equations(t, y, dim1,dim2,Reg,lambd1, Re1, we1, lambd2, Re2, we2,Gamma):
-#     """
-#     Calculate the time derivative of rho
-#     """
-#     #I arrange the state in the following way. the states n-s are the first dim states, the states n-p the second dim states.
-#     rho = y.reshape((dim1+dim2, dim1+dim2))
-#     # Initialize the rate of change matrix with zeros
-#     drho_dt = np.zeros_like(rho)
-#     # Get the current omega matrix for this time step (insert omega(t, dim1,dim2))
-#     Omega_t = omegaMuNu(t,dim1,dim2,Reg)
-#     # Get the current gamma matrix
- 
-
-#     # Loop over each dimension to update population dynamics
-
-    
-#     for mu in range(dim1): 
-#         for nu in range(dim2):
-#           # Population update for s-states
-#             drho_dt[mu, mu] += Gamma[mu, nu] * rho[dim1+nu, dim1+nu]-1j*(Omega_t[mu, nu]*rho[nu+dim1 , mu]-np.conj(Omega_t[mu, nu])*rho[mu , nu+dim1])
-#             # Population update for p-states
-#             drho_dt[nu + dim1, nu+ dim1] += - Gamma[mu, nu] * rho[nu + dim1, nu + dim1]-1j*(np.conj(Omega_t[mu, nu])*rho[mu , nu+dim1]-Omega_t[mu, nu]*rho[nu+dim1 , mu])
-           
-#             drho_dt[nu+dim1, mu]=-0.5*np.sum(Gamma[:, nu]*rho[nu+dim1, mu])-1j*(np.conj(Omega_t[mu, nu] )*rho[mu , mu]-np.conj(Omega_t[mu, nu])*rho[nu+dim1 , nu+dim1])
-#             # The coherence terms must be the conjugate of their counterparts
-#             drho_dt[ mu,nu+dim1]= np.conj(drho_dt[nu+dim1, mu])
-         
-    
-#     return drho_dt.flatten()
-
-
-def system_equations_opt_vect(t, y, dim1, dim2, Reg, De1, Re1, we1, De2, Re2, we2,Gamma):
+def system_equations_opt_vect(t, y, dim1, dim2, Reg, De1, Re1, we1, De2, Re2, we2,Gamma,Amunu,Omega_0,omega_L,energy_eigenvalues,energy_eigenvalues1):
     """
     Calculate the time derivative of rho
     """
@@ -243,7 +215,7 @@ def system_equations_opt_vect(t, y, dim1, dim2, Reg, De1, Re1, we1, De2, Re2, we
     rho=vector_to_rho(y, N)
     
     drho_dt = np.zeros_like(rho, dtype=complex)
-    Omega_t = omegaMuNu(t, dim1, dim2, Reg)
+    Omega_t = omegaMuNu(t, dim1, dim2, Reg,Amunu,Omega_0,omega_L,energy_eigenvalues,energy_eigenvalues1)
  
     populations_s=np.zeros(dim1)
     populations_p=np.zeros(dim2)
@@ -282,7 +254,7 @@ def system_equations_opt_vect(t, y, dim1, dim2, Reg, De1, Re1, we1, De2, Re2, we
 
 
 
-def solve_dyn_vect(rho_initial, t, dim1, dim2, Reg, De1, Re1, we1, De2, Re2, we2, Esp, method_code):
+def solve_dyn_vect(rho_initial, t, Reg, De1, Re1, we1, De2, Re2, we2, Esp,Omega_0,omega_L, method_code):
     # Map numerical values to integration methods
     method_mapping = {
         1: 'RK45',
@@ -294,59 +266,33 @@ def solve_dyn_vect(rho_initial, t, dim1, dim2, Reg, De1, Re1, we1, De2, Re2, we2
     }
     
     method = method_mapping.get(method_code, 'DOP853')  # Default to 'DOP853' if code is invalid
+    # Calculate lambda for energy eigenvalues
+    lambd1 = lambd(De1,we1)
+    lambd2 = lambd(De2,we2)
+
+    # Calculate energy eigenvalues
+    energy_eigenvalues = omega_nu(lambd1) * De1
+    energy_eigenvalues1 = omega_nu(lambd2) * De2+Esp
+    #I fix the dimensions of my hilbert space
+
+    dim1=len(energy_eigenvalues)
+    dim2=len(energy_eigenvalues1)
 
     tau = t[-1]
     rho_initial_vector = rho_to_vector(rho_initial)
+    #I calculate Amunu and Gamma once and for all
+    Amunu=Afc(lambd1, Re1, we1, lambd2, Re2, we2)
     Gamma = gammaMatrix(dim1, dim2, Reg, De1, Re1, we1, De2, Re2, we2, Esp)
     # Initialize tqdm progress bar
   
-
+ 
     solution = solve_ivp(system_equations_opt_vect, [0, tau], rho_initial_vector,
-                        args=(dim1, dim2, Reg, De1, Re1, we1, De2, Re2, we2, Gamma),
-                        method=method, t_eval=t)
+                        args=(dim1, dim2, Reg, De1, Re1, we1, De2, Re2, we2, Gamma,Amunu,Omega_0,omega_L,energy_eigenvalues,energy_eigenvalues1),
+                        method=method, t_eval=t, rtol=1e-10, atol=1e-12)
  
     return solution
 
-def system_equations_opt(t, y, dim1, dim2, Reg, De1, Re1, we1, De2, Re2, we2,Gamma):
-    """
-    Calculate the time derivative of rho
-    """
-    
-    rho = y.reshape((dim1 + dim2, dim1 + dim2))
-    drho_dt = np.zeros_like(rho)
-    Omega_t = omegaMuNu(t, dim1, dim2, Reg)
- 
-    populations_s=np.zeros(dim1)
-    populations_p=np.zeros(dim2)
 
-    # Update population dynamics for s-states
-    Gamma_rho_p_diag = np.einsum('ij,j->ij', Gamma, np.diag(rho[dim1:, dim1:]))
-    populations_s=  Gamma_rho_p_diag.sum(axis=1)
-    
-    # Update population dynamics for p-states
-    populations_p= -Gamma_rho_p_diag.sum(axis=0)
-   
-    # Set the first dim1 diagonal terms for s-states
-    drho_dt[np.arange(dim1), np.arange(dim1)] = populations_s
-   
-    # Set the following dim2 diagonal terms for p-states
-    drho_dt[np.arange(dim1, dim1 + dim2), np.arange(dim1, dim1 + dim2)] = populations_p
-   
-    # Update coherence terms
-    Gamma_v=Gamma.sum(axis=0) #I calculate \sum_\mu^\prime \Gamma_\mu^\prime,\nu
-    coherences = -0.5 * np.einsum('j,jk->jk', Gamma_v, rho[dim1:, :dim1])
-    drho_dt[dim1:, :dim1] += coherences
-    drho_dt[:dim1, dim1:] += np.conj(coherences.T)
-    
-    # Adding Hamiltonian dynamics
-    # Coherent evolution term: -i [Omega, rho]
-    Omega=np.zeros_like(rho)
-    Omega[:dim1, dim1:] = Omega_t
-    Omega[dim1:, :dim1] = np.conj(Omega_t.T)
-    commutator = np.dot(Omega, rho) - np.dot(rho, Omega)
-    drho_dt += -1j * commutator
-
-    return drho_dt.flatten()
 
 
 
@@ -382,12 +328,6 @@ def vector_to_rho(vect, N):
  
 
 
-# def solve_dyn(rho_initial,t, dim1,dim2,Deg,De1, Re1, we1, De2, Re2, we2,Esp):
-#     tau = t[-1]
-#     Gamma=gammaMatrix(dim1,dim2,Reg,De1, Re1, we1, De2, Re2, we2,Esp)
-#     solution = solve_ivp(system_equations_opt, [0, tau], rho_initial.flatten(), args=(dim1,dim2,Deg,De1, Re1, we1, De2, Re2, we2,Gamma), method='DOP853', t_eval=t)
-#     #after few test the method DOP853 is the onyl one giving correct results
-#     return solution
 
 
 def lambd(De,we):
@@ -396,10 +336,3 @@ def lambd(De,we):
     mass=7.1*10**-26
     lambd=np.sqrt(2 * De*e*mass) * we*10**-10/hbar #2*De/0.0073  # Simplified expression with units adjusted
     return lambd
-
-
-
-
-hbar=6.654/(2*np.pi)*10**-34
-e=1.6*10**-19
-mass=7.1*10**-26
