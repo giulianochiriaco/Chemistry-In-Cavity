@@ -6,8 +6,8 @@ Created on Thu May 23 12:20:27 2024
 @author: marcello.andolina
 """
 
-import functions as fu
-import functions1 as fu1
+
+import functions1 as fu
 import numpy as np
 from scipy.special import factorial, gamma, genlaguerre
 import matplotlib.pyplot as plt
@@ -28,11 +28,11 @@ mass=7.1*10**-26
 De1 = 0.474  # Depth of the potential well
 Re1 = 4.23  # Equilibrium bond length
 #we1 =1.31 ## Width of the potential well
-we1 = 0.4
+we1 = 0.05
 De2 = 0.846  # Depth of the potential well
 Re2 = 4.2  # Equilibrium bond length
 #we2 =1.763# Width of the potential well
-we2 = 0.4
+we2 = 0.05
 Esp=1.212
 lambd1 = fu.lambd(De1,we1)
 lambd2 = fu.lambd(De2,we2)
@@ -69,7 +69,7 @@ rho_initial[dim1-1, dim1-1] = 1
 
 
 
-tau = 40
+tau = 200
 t_eval = np.linspace(0, tau,500)
 N_t=len(t_eval)
 
@@ -81,7 +81,7 @@ populations_sum = []
 
 start_time = time.time()
 #solution0 = fu.solve_dyn_vect(rho_initial, t_eval, Reg, De1, Re1, we1, De2, Re2, we2, Esp,Omega_0,omega_L, 3)
-solution0 = fu1.solve_dyn_vect(rho_initial, t_eval, Reg, De1, Re1, we1, De2, Re2, we2, Esp,Omega_0,omega_L,4)
+solution0 = fu.solve_dyn_vect(rho_initial, t_eval, Reg, De1, Re1, we1, De2, Re2, we2, Esp,Omega_0,omega_L,1)
 
 end_time = time.time()
 
@@ -111,9 +111,11 @@ plt.plot(t_eval, populations_sum, 'k--', label='Sum of populations', linewidth=2
 plt.xlabel('Time')
 plt.ylabel('Population')
 plt.title('Population Dynamics of Electronic States Over Time')
-#plt.legend()
+plt.legend()
 plt.grid(True)
 plt.savefig('./Figs/Test.pdf', dpi=300)
 plt.show()
+
+
 
 
