@@ -3,12 +3,12 @@
 """
 Created on Tue Apr 30 12:18:34 2024
 
-@author: marcello.andolina
+@author: marcello.andolina giuliano.chiriaco
 """
 
 import numpy as np
+import scipy.linalg as sla
 from scipy.special import factorial, gamma, genlaguerre
-import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp,odeint
 from matplotlib import rc, rcParams
 import time
@@ -43,24 +43,6 @@ def lambd(De,we):
     lambd=np.sqrt(2 * De*e*mass) * we*a0/hbar #2*De/0.0073  # Simplified expression with units adjusted
     return lambd
 
-def psiR(R, lambd, nu, Re, we, norm=1):
-    """
-    Gives the eigenfunction of the bound state at mode nu as function 
-    of radial coordinate R (vector as input) for a Morse potential 
-    given by Re and we. lambd is sqrt(2*m*De)*we/hbar.
-    """
-   
-    zv = 2 * lambd * np.exp(-(R - Re) / we)
-   
-    psi= psiz(zv, lambd, nu)
-
-    
-    # Compute the norm
-    norm_factor = np.sqrt(np.sum(np.conjugate(psi) * psi))
-        
-    # Normalize the wavefunction
-    return psi / norm_factor if norm else psi
-
 
 def psiz(z, lambd, nu):
     """
@@ -69,11 +51,9 @@ def psiz(z, lambd, nu):
     """
     z0= 2 * lambd 
     
-
     term1=np.exp(-z / 2)/np.exp(-z0 / 2)
     term2=genlaguerre(nu, 2 * lambd - 2 * nu - 1)(z)/genlaguerre(nu, 2 * lambd - 2 * nu - 1)(z0)
     term3=(z/z0)**(lambd - nu - 0.5)
-   # N = np.sqrt((2 * lambd - 2 * nu - 1) * factorial(nu) / gamma(2 * lambd - nu))
    # Replace invalid values with small numbers or zero
     term1 = np.where(np.isfinite(term1), term1, 0)
     term2 = np.where(np.isfinite(term2), term2, 0)
@@ -81,7 +61,23 @@ def psiz(z, lambd, nu):
     
     psi=term1*term2*term3
     return psi
-    
+
+def psiR(R, lambd, nu, Re, we, norm=1):
+    """
+    Gives the eigenfunction of the bound state at mode nu as function 
+    of radial coordinate R (vector as input) for a Morse potential 
+    given by Re and we. lambd is sqrt(2*m*De)*we/hbar.
+    """
+    zv = 2 * lambd * np.exp(-(R - Re) / we)
+   
+    psi= psiz(zv, lambd, nu)
+
+    # Compute the norm
+    norm_factor = np.sqrt(np.sum(np.conjugate(psi) * psi))
+        
+    # Normalize the wavefunction
+    return psi / norm_factor if norm else psi
+
 
 def Afc(lambd1, Re1, we1, lambd2, Re2, we2):
     """
@@ -97,10 +93,6 @@ def Afc(lambd1, Re1, we1, lambd2, Re2, we2):
     # Generate all psiR for nu1 and nu2
     psi1 = np.array([psiR(Rv, lambd1, nu, Re1, we1) for nu in range(nuM1 )])
     psi2 = np.array([psiR(Rv, lambd2, nu, Re2, we2) for nu in range(nuM2 )])
-   
-    # Compute the norms
-   # N1 = np.sum(psi1 * np.conjugate(psi1), axis=1)
-   # N2 = np.sum(psi2 * np.conjugate(psi2), axis=1)
     
     # Compute the scalar products
     scalar_products = np.einsum('ik,jk->ij', psi1, np.conjugate(psi2))
@@ -134,12 +126,11 @@ def Ec_Gaussian(tv,wL,tau,wc,r):
     "Given an input time vector tv, a cavity with reflectivity r and frequency wc"
     "a Gaussian pulse of main frequency wL and width tau"
     "returns the electric field inside the cavity as function of t, by summing the electric fields at earlier times reflected by the mirrors"
-    Nr = -int(20/np.log(r))
+    Nr = -int(20/np.log(r+10**-16))
     out = np.zeros(len(tv),dtype=complex)
     for n in range(Nr):
         out = out + (-r)**n*np.exp(-1j*wL*(tv-n*np.pi/wc))*np.exp(-(tv-n*np.pi/wc)**2/tau**2)
     return out
-
 
 
 def gammaMatrix(dim1,dim2,Reg,De1, Re1, we1, De2, Re2, we2,E_sp,wc=0):
