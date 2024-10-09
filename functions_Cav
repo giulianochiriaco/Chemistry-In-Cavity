@@ -79,28 +79,23 @@ def psiR(R, lambd, nu, Re, we, norm=1):
     return psi / norm_factor if norm else psi
 
 
-def Afc(lambd1, Re1, we1, lambd2, Re2, we2):
-    """
-    Gives a matrix (table) with the Franck-Condon factors between the vibrational levels
-    of two different Morse potentials. The Morse potentials are characterized by different
-    lambda (i.e., De), Re, and we. Returns a matrix array with the Franck-Condon factors 
-    between all the vibrational levels. 
-    """
-    nuM1 = int(np.floor(lambd1 +0.5))
-    nuM2 = int(np.floor(lambd2 + 0.5))
-    Rv = np.linspace(0, 50 * max(we1, we2) + max(Re1, Re2), 10000)  # creates a grid for numerical integration
+def gammaMatrix(Reg,Amunu,energy_s,energy_p,wc=0):
+    if np.shape(Amunu)[0]!=len(energy_s) or np.shape(Amunu)[1]!=len(energy_p):
+        raise ValueError('Dimension mismatch')
+    Ga = np.zeros(np.shape(Amunu)) 
+    # given that Reg is in Angstrom and \hbar\omega is in eV G0 in eV reads
+    En = e # 1 eV in Joules
+    dsp = e*a0*Reg #dipole moment
     
-    # Generate all psiR for nu1 and nu2
-    psi1 = np.array([psiR(Rv, lambd1, nu, Re1, we1) for nu in range(nuM1 )])
-    psi2 = np.array([psiR(Rv, lambd2, nu, Re2, we2) for nu in range(nuM2 )])
+    term_1 = En**3/ (hbar**4*c**3 )
+    term_2= dsp**2/(3*np.pi* epsilon_0)
+
+    G0=term_1*term_2*(2*np.pi*hbar/e)
+   
+    energy_diff = energy_p[ np.newaxis,:] - energy_s[:,np.newaxis]
+    Ga = G0*Amunu**2 * (energy_diff ** 3) *(energy_diff>wc) #the last factor normalizes the decay rate to eV
     
-    # Compute the scalar products
-    scalar_products = np.einsum('ik,jk->ij', psi1, np.conjugate(psi2))
-    
-    # Compute Amunu
-    Amunu = scalar_products# / np.sqrt(np.outer(N1, N2))
-    
-    return Amunu
+    return Ga
 
 
 def Ec_filter(Et,tv,r,wc):
