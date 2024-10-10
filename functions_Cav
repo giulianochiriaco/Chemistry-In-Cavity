@@ -10,6 +10,7 @@ import numpy as np
 import scipy.linalg as sla
 from scipy.special import factorial, gamma, genlaguerre
 from scipy.integrate import solve_ivp,odeint
+from scipy.interpolate import interp1d
 from matplotlib import rc, rcParams
 import time
 #from tqdm import tqdm
@@ -150,7 +151,6 @@ def gammaMatrix(Reg,Amunu,energy_s,energy_p,wc=0):
     Ga = G0*Amunu**2 * (energy_diff ** 3) *(energy_diff>wc) #the last factor normalizes the decay rate to eV
     
     return Ga
-    
 
 def omegaMuNu(t,Amunu,Omega_0,omega_L,energy_s,energy_p):
     Om = np.zeros(np.shape(Amunu), dtype=complex)#(dim1, dim2)
@@ -161,6 +161,35 @@ def omegaMuNu(t,Amunu,Omega_0,omega_L,energy_s,energy_p):
     return Om
 
 
+def rho_to_vector(rho):
+    N = rho.shape[0]
+    vect = np.zeros(N**2)
+    
+    # Diagonal elements
+    vect[:N] =np.real( np.diag(rho))
+    
+    # Off-diagonal elements
+    off_diag_indices = np.tril_indices(N, -1)
+    real_parts = np.real(rho[off_diag_indices])
+    imag_parts = np.imag(rho[off_diag_indices])
+    
+    vect[N + 2*np.arange(len(real_parts))] = real_parts
+    vect[N + 2*np.arange(len(imag_parts)) + 1] = imag_parts
+    
+    return vect
+
+def vector_to_rho(vect, N):
+    rho = np.zeros((N, N), dtype=complex)
+    
+    # Diagonal elements
+    np.fill_diagonal(rho, vect[:N])
+    
+    # Off-diagonal elements
+    off_diag_indices = np.tril_indices(N, -1)
+    rho[off_diag_indices] = vect[N + 2*np.arange(len(off_diag_indices[0]))] + 1j * vect[N + 2*np.arange(len(off_diag_indices[0])) + 1]
+    rho.T[off_diag_indices] = np.conj(rho[off_diag_indices])
+    
+    return rho
 
 
 def system_equations_opt_vect(t, y, dim1, dim2,Gamma,Amunu,Omega_0,energy_s,energy_p):
@@ -214,7 +243,7 @@ def system_equations_opt_vect(t, y, dim1, dim2,Gamma,Amunu,Omega_0,energy_s,ener
     return  drho_dt_vector
 
 
-def solve_dyn_vect(rho_initial, t, Reg, De1, Re1, we1, De2, Re2, we2, Esp,Omega_0,omega_L, method_code,wc=0,E0_t=0):
+def solve_dyn_vect(rho_initial, t, Amunu,Gamma,Reg,Omega_0,omega_L, method_code,energy_s,energy_p,wc=0,E0_t=0):
     # Map numerical values to integration methods
     method_mapping = {
         1: 'RK45',
@@ -226,23 +255,12 @@ def solve_dyn_vect(rho_initial, t, Reg, De1, Re1, we1, De2, Re2, we2, Esp,Omega_
     }
     
     method = method_mapping.get(method_code, 'DOP853')  # Default to 'DOP853' if code is invalid
-    # Calculate lambda for energy eigenvalues
-    lambd1 = lambd(De1,we1)
-    lambd2 = lambd(De2,we2)
-
-    # Calculate energy eigenvalues
-    energy_s = omega_nu(lambd1) * De1
-    energy_p = omega_nu(lambd2) * De2+Esp
-    #I fix the dimensions of my hilbert space
 
     dim1=len(energy_s)
     dim2=len(energy_p)
 
     tau = t[-1]
     rho_initial_vector = rho_to_vector(rho_initial)
-    #I calculate Amunu and Gamma once and for all
-    Amunu=Afc(lambd1, Re1, we1, lambd2, Re2, we2)
-    Gamma = gammaMatrix(Reg, Amunu, energy_s,energy_p,wc=wc)
     # Initialize tqdm progress bar
  
     solution = solve_ivp(system_equations_opt_vect, [0, tau], rho_initial_vector,
@@ -276,35 +294,40 @@ def Decay(rho,dim1,Gamma,t):
     np.fill_diagonal(newrho, newpops)
     return newrho
 
+def cycle_evolution(rho_initial, t, t_decay, Reg, De1, Re1, we1, De2, Re2, we2, Esp,Omega_0,omega_L, method_code,wc=0,E0_t=0):
+    # Map numerical values to integration methods
+    lambd1 = lambd(De1,we1)
+    lambd2 = lambd(De2,we2)
+    energy_eigenvalues = omega_nu(lambd1) * De1
+    energy_eigenvalues1 = omega_nu(lambd2) * De2+Esp
+    dim1=len(energy_eigenvalues)
+    dim2=len(energy_eigenvalues1)
+    Gamma = gammaMatrix(dim1, dim2, Reg, De1, Re1, we1, De2, Re2, we2, Esp,wc=wc)
+    N = dim1 + dim2
+    rho_inter = vector_to_rho(solve_dyn_vect(rho_initial, t, Reg, De1, Re1, we1, De2, Re2, we2, Esp, Omega_0, omega_L, method_code),N)
+    rho_final = Decay(rho_inter,dim1,Gamma,t_decay)
+    
+    return rho_final
 
-def rho_to_vector(rho):
-    N = rho.shape[0]
-    vect = np.zeros(N**2)
-    
-    # Diagonal elements
-    vect[:N] =np.real( np.diag(rho))
-    
-    # Off-diagonal elements
-    off_diag_indices = np.tril_indices(N, -1)
-    real_parts = np.real(rho[off_diag_indices])
-    imag_parts = np.imag(rho[off_diag_indices])
-    
-    vect[N + 2*np.arange(len(real_parts))] = real_parts
-    vect[N + 2*np.arange(len(imag_parts)) + 1] = imag_parts
-    
-    return vect
 
-def vector_to_rho(vect, N):
-    rho = np.zeros((N, N), dtype=complex)
-    
-    # Diagonal elements
-    np.fill_diagonal(rho, vect[:N])
-    
-    # Off-diagonal elements
-    off_diag_indices = np.tril_indices(N, -1)
-    rho[off_diag_indices] = vect[N + 2*np.arange(len(off_diag_indices[0]))] + 1j * vect[N + 2*np.arange(len(off_diag_indices[0])) + 1]
-    rho.T[off_diag_indices] = np.conj(rho[off_diag_indices])
-    
-    return rho
- 
+
+def main_cycles(tvec,t_decay,De1,Re1,we1,De2,Re2,we2,Esp,Reg):
+
+    # Calculate lambda for energy eigenvalues
+    lambd1 = lambd(De1,we1)
+    lambd2 = lambd(De2,we2)
+
+    # Calculate energy eigenvalues
+    energy_s = omega_nu(lambd1) * De1
+    energy_p = omega_nu(lambd2) * De2+Esp
+    #I fix the dimensions of my hilbert space
+
+    #I calculate Amunu and Gamma once and for all
+    Amunu = Afc(lambd1,Re1,we1,lambd2,Re2,we2)
+    Gamma = gammaMatrix(Reg, Amunu, energy_s,energy_p,wc=wc)
+
+    E0_t = Ec_Gaussian(tvec,omega_L,tau,omega_c,r)
+    E0_interp = interp1d(tv, E0t, fill_value="extrapolate")
+
+    rho_final = 
 
