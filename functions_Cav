@@ -79,23 +79,28 @@ def psiR(R, lambd, nu, Re, we, norm=1):
     return psi / norm_factor if norm else psi
 
 
-def gammaMatrix(Reg,Amunu,energy_s,energy_p,wc=0):
-    if np.shape(Amunu)[0]!=len(energy_s) or np.shape(Amunu)[1]!=len(energy_p):
-        raise ValueError('Dimension mismatch')
-    Ga = np.zeros(np.shape(Amunu)) 
-    # given that Reg is in Angstrom and \hbar\omega is in eV G0 in eV reads
-    En = e # 1 eV in Joules
-    dsp = e*a0*Reg #dipole moment
+def Afc(lambd1, Re1, we1, lambd2, Re2, we2):
+    """
+    Gives a matrix (table) with the Franck-Condon factors between the vibrational levels
+    of two different Morse potentials. The Morse potentials are characterized by different
+    lambda (i.e., De), Re, and we. Returns a matrix array with the Franck-Condon factors 
+    between all the vibrational levels. 
+    """
+    nuM1 = int(np.floor(lambd1 +0.5))
+    nuM2 = int(np.floor(lambd2 + 0.5))
+    Rv = np.linspace(0, 50 * max(we1, we2) + max(Re1, Re2), 10000)  # creates a grid for numerical integration
     
-    term_1 = En**3/ (hbar**4*c**3 )
-    term_2= dsp**2/(3*np.pi* epsilon_0)
-
-    G0=term_1*term_2*(2*np.pi*hbar/e)
-   
-    energy_diff = energy_p[ np.newaxis,:] - energy_s[:,np.newaxis]
-    Ga = G0*Amunu**2 * (energy_diff ** 3) *(energy_diff>wc) #the last factor normalizes the decay rate to eV
+    # Generate all psiR for nu1 and nu2
+    psi1 = np.array([psiR(Rv, lambd1, nu, Re1, we1) for nu in range(nuM1 )])
+    psi2 = np.array([psiR(Rv, lambd2, nu, Re2, we2) for nu in range(nuM2 )])
     
-    return Ga
+    # Compute the scalar products
+    scalar_products = np.einsum('ik,jk->ij', psi1, np.conjugate(psi2))
+    
+    # Compute Amunu
+    Amunu = scalar_products# / np.sqrt(np.outer(N1, N2))
+    
+    return Amunu
 
 
 def Ec_filter(Et,tv,r,wc):
@@ -128,55 +133,37 @@ def Ec_Gaussian(tv,wL,tau,wc,r):
     return out
 
 
-def gammaMatrix(dim1,dim2,Reg,De1, Re1, we1, De2, Re2, we2,E_sp,wc=0):
-    Ga = np.zeros((dim1, dim2)) 
-    # Creates the A_munu matrix
-    lambd1 = lambd(De1,we1)
-    lambd2 = lambd(De2,we2)
-    Amunu=Afc(lambd1, Re1, we1, lambd2, Re2, we2)
-    energy_eigenvalues = omega_nu(lambd1) * De1
-    energy_eigenvalues1 = omega_nu(lambd2) * De2+E_sp
+def gammaMatrix(Reg,Amunu,energy_s,energy_p,wc=0):
+    if np.shape(Amunu)[0]!=len(energy_s) or np.shape(Amunu)[1]!=len(energy_p):
+        raise ValueError('Dimension mismatch')
+    Ga = np.zeros(np.shape(Amunu)) 
     # given that Reg is in Angstrom and \hbar\omega is in eV G0 in eV reads
-    # Given values
     En = e # 1 eV in Joules
-    Reg_scale = 1 * 10**-10  # 1 angstrom in meters
+    dsp = e*a0*Reg #dipole moment
     
     term_1 = En**3/ (hbar**4*c**3 )
-    term_2= Reg_scale**2 * e**2/(3*np.pi* epsilon_0)
-    
-    # Calculate denominator
+    term_2= dsp**2/(3*np.pi* epsilon_0)
+
+    G0=term_1*term_2*(2*np.pi*hbar/e)
    
-    G0=Reg**2*term_1*term_2
-   
-    # given that Reg is in Angstrom and \hbar\omega is in eV G0 in eV reads
-    #OLD for loop computation of Gamma
-    # for i in range (dim1):
-    #     for j in range (dim2):
-    #         Ga[i,j]=Amunu[i,j]*( energy_eigenvalues1[j]-  energy_eigenvalues[i])**3
-    # Vectorized computation of Ga matrix
-    energy_diff = energy_eigenvalues1[ np.newaxis,:] - energy_eigenvalues[:,np.newaxis]
-    Ga = G0*Amunu**2 * (energy_diff ** 3) *(energy_diff>wc)*G0*(2*np.pi*hbar/e) #the last factor normalizes the decay rate to eV
+    energy_diff = energy_p[ np.newaxis,:] - energy_s[:,np.newaxis]
+    Ga = G0*Amunu**2 * (energy_diff ** 3) *(energy_diff>wc) #the last factor normalizes the decay rate to eV
     
     return Ga
     
 
-
-def omegaMuNu(t,dim1,dim2,Reg,Amunu,Omega_0,omega_L,energy_eigenvalues,energy_eigenvalues1,E0_t=0):
+def omegaMuNu(t,Amunu,Omega_0,omega_L,energy_s,energy_p):
     Om = np.zeros(np.shape(Amunu), dtype=complex)#(dim1, dim2)
-    energy_diff = energy_eigenvalues1[ np.newaxis,:] - energy_eigenvalues[:,np.newaxis]
-    #allows to specify the time dependence of the electric field
-    if E0_t==0:
-        E0_t = np.exp(-t**2/200)#otherwise just uses a Gaussian pulse
-        #E0_t = np.sum([np.exp])
-    exp_f = np.exp(1j * (energy_diff - omega_L) * t)*E0_t
+    energy_diff = energy_p[ np.newaxis,:] - energy_s[:,np.newaxis]
+    exp_f = np.exp(1j * energy_diff * t)
    
-    Om=Omega_0*Amunu*exp_f
-    # Om=Deg*E0(t)
-   
+    Om=Omega_0*Amunu  
     return Om
 
 
-def system_equations_opt_vect(t, y, dim1, dim2, Reg, De1, Re1, we1, De2, Re2, we2,Gamma,Amunu,Omega_0,omega_L,energy_eigenvalues,energy_eigenvalues1,E0_t=0):
+
+
+def system_equations_opt_vect(t, y, dim1, dim2,Gamma,Amunu,Omega_0,energy_s,energy_p):
     """
     Calculate the time derivative of rho
     """
@@ -184,7 +171,9 @@ def system_equations_opt_vect(t, y, dim1, dim2, Reg, De1, Re1, we1, De2, Re2, we
     rho=vector_to_rho(y, N)
     
     drho_dt = np.zeros_like(rho, dtype=complex)
-    Omega_t = omegaMuNu(t, dim1, dim2, Reg,Amunu,Omega_0,omega_L,energy_eigenvalues,energy_eigenvalues1,E0_t=E0_t)
+    E0_t = E0_interp(t)
+    energy_diff = energy_p[ np.newaxis,:] - energy_s[:,np.newaxis]
+    Omega_t = Omega_0*Amunu*np.exp(1j * energy_diff * t)*E0_t#omegaMuNu(t, dim1, dim2, Reg,Amunu,Omega_0,omega_L,energy_eigenvalues,energy_eigenvalues1,E0_t=E0_t)
  
     populations_s=np.zeros(dim1)
     #populations_p=np.zeros(dim2)
@@ -225,8 +214,6 @@ def system_equations_opt_vect(t, y, dim1, dim2, Reg, De1, Re1, we1, De2, Re2, we
     return  drho_dt_vector
 
 
-
-
 def solve_dyn_vect(rho_initial, t, Reg, De1, Re1, we1, De2, Re2, we2, Esp,Omega_0,omega_L, method_code,wc=0,E0_t=0):
     # Map numerical values to integration methods
     method_mapping = {
@@ -244,29 +231,50 @@ def solve_dyn_vect(rho_initial, t, Reg, De1, Re1, we1, De2, Re2, we2, Esp,Omega_
     lambd2 = lambd(De2,we2)
 
     # Calculate energy eigenvalues
-    energy_eigenvalues = omega_nu(lambd1) * De1
-    energy_eigenvalues1 = omega_nu(lambd2) * De2+Esp
+    energy_s = omega_nu(lambd1) * De1
+    energy_p = omega_nu(lambd2) * De2+Esp
     #I fix the dimensions of my hilbert space
 
-    dim1=len(energy_eigenvalues)
-    dim2=len(energy_eigenvalues1)
+    dim1=len(energy_s)
+    dim2=len(energy_p)
 
     tau = t[-1]
     rho_initial_vector = rho_to_vector(rho_initial)
     #I calculate Amunu and Gamma once and for all
     Amunu=Afc(lambd1, Re1, we1, lambd2, Re2, we2)
-    Gamma = gammaMatrix(dim1, dim2, Reg, De1, Re1, we1, De2, Re2, we2, Esp,wc=wc)
+    Gamma = gammaMatrix(Reg, Amunu, energy_s,energy_p,wc=wc)
     # Initialize tqdm progress bar
-  
  
     solution = solve_ivp(system_equations_opt_vect, [0, tau], rho_initial_vector,
-                        args=(dim1, dim2, Reg, De1, Re1, we1, De2, Re2, we2, Gamma,Amunu,Omega_0,omega_L,energy_eigenvalues,energy_eigenvalues1),
+                        args=(dim1, dim2, Gamma,Amunu,Omega_0,omega_L,energy_s,energy_p),
                         method=method, t_eval=t, rtol=1e-10, atol=1e-12)
  
     return solution
 
 
+def DecayPopsMatrix(N,dim1,Gamma,t):
+    G_pops=np.zeros((N,N))
+    G_pops[:dim1,dim1:] = Gamma
+    G_pops[dim1:,dim1:] = -np.diag(Gamma.sum(axis=0))
+    return sla.expm(G_pops*t)
 
+def Decay(rho,dim1,Gamma,t):
+    N=np.shape(rho)[0]
+    M_pops = DecayPopsMatrix(N, dim1, Gamma, t)
+    newpops = np.dot(M_pops,np.diag(rho))
+    
+    newrho = rho.copy()
+    
+    v=Gamma.sum(axis=0)
+    M_pp = np.exp(-0.5*(np.outer(v,np.ones(N-dim1))+np.outer(np.ones(N-dim1),v))*t)
+    newrho[dim1:,dim1:] = M_pp*newrho[dim1:,dim1:]
+    
+    M_ps = np.exp(-0.5*np.outer(v,np.ones(dim1))*t)
+    newrho[dim1:,:dim1] = M_ps*newrho[dim1:,:dim1]
+    newrho[:dim1,dim1:] = np.conj(np.transpose(newrho[dim1:,:dim1]))
+    
+    np.fill_diagonal(newrho, newpops)
+    return newrho
 
 
 def rho_to_vector(rho):
